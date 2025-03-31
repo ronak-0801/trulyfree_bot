@@ -171,10 +171,10 @@ async def stream_chat(body: ChatRequest):
     return response
 
 
-@app.get("/health")
+@app.get("/")
 async def health_check():
     """Simple health check endpoint"""
-    return {"status": "healthy"}
+    return {"status": "running"}
 
 
 if __name__ == "__main__":

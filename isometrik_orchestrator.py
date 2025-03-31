@@ -28,6 +28,9 @@ Return the raw JSON context exactly as provided. Make sure to return entire cont
 """
 }
 
+inference_config = {
+    "maxTokens": 4000
+}
 
 class IsometrikRetrieverOptions:
     def __init__(self, endpoint: str, auth_token: str, agent_id: str, session_id: str):
@@ -76,7 +79,7 @@ class IsometrikRetriever(Retriever):
             
             content = response.text
             data = json.loads(content)
-            # print(data)
+            print(data)
             return data
 
         except Exception as e:
@@ -157,7 +160,8 @@ def create_query_agent():
             model="gpt-4o-mini",
             streaming=False,
             retriever=create_query_retriever(),
-            custom_system_prompt=custom_system_prompt
+            custom_system_prompt=custom_system_prompt,
+            inference_config=inference_config
         )
     )
 
@@ -171,7 +175,8 @@ def create_order_agent():
             model="gpt-4o-mini",
             streaming=False,
             retriever=create_order_retriever(),
-            custom_system_prompt=custom_system_prompt
+            custom_system_prompt=custom_system_prompt,
+            inference_config=inference_config
         )
     )
 
@@ -185,7 +190,8 @@ def create_manager_agent():
             model="gpt-4o-mini",
             streaming=False,
             retriever=create_ecom_manager_retriever(),
-            custom_system_prompt=custom_system_prompt
+            custom_system_prompt=custom_system_prompt,
+            inference_config=inference_config
         )
     )
 
@@ -199,7 +205,8 @@ def create_subscription_agent():
             model="gpt-4o-mini",
             streaming=False,
             retriever=create_subscription_retriever(),
-            custom_system_prompt=custom_system_prompt
+            custom_system_prompt=custom_system_prompt,
+            inference_config=inference_config
         )
     )
 
@@ -213,7 +220,8 @@ def create_product_agent():
             model="gpt-4o-mini",
             streaming=False,
             retriever=create_product_retriever(),
-            custom_system_prompt=custom_system_prompt
+            custom_system_prompt=custom_system_prompt,
+            inference_config=inference_config
         )
     )
 
