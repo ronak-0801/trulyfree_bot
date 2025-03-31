@@ -88,7 +88,7 @@ def create_query_agent(body):
     options = IsometrikAgentOptions(
         name="Query Agent",
         description="Specializes in answering customer FAQs and product information",
-        api_url=os.getenv("QUERY_AGENT_API_URL"),
+        api_url=os.getenv("API_URL"),
         auth_token=os.getenv("QUERY_AGENT_AUTH_TOKEN"),
         additional_params=body
     )
@@ -100,7 +100,7 @@ def create_order_agent(body):
     options = IsometrikAgentOptions(
         name="Order Agent",
         description="Specializes in handling order-related queries, order status, and processing new orders",
-        api_url=os.getenv("ORDER_AGENT_API_URL"),
+        api_url=os.getenv("API_URL"),
         auth_token=os.getenv("ORDER_AGENT_AUTH_TOKEN"),
         additional_params=body
     )
@@ -111,7 +111,7 @@ def create_ecom_manager_agent(body):
     options = IsometrikAgentOptions(
         name="Ecom Manager Agent",
         description="Specializes in finding toxin-free, eco-friendly solutions for home and personal care",
-        api_url=os.getenv("MANAGER_AGENT_API_URL"),
+        api_url=os.getenv("API_URL"),
         auth_token=os.getenv("MANAGER_AGENT_AUTH_TOKEN"),
         additional_params=body
     )
@@ -122,7 +122,7 @@ def create_subscription_agent(body):
     options = IsometrikAgentOptions(
         name="Subscription Agent",
         description="Specializes in handling subscription-related queries",
-        api_url=os.getenv("SUBSCRIPTION_AGENT_API_URL"),
+        api_url=os.getenv("API_URL"),
         auth_token=os.getenv("SUBSCRIPTION_AGENT_AUTH_TOKEN"),
         additional_params=body
     )
@@ -133,7 +133,7 @@ def create_product_details_agent(body):
     options = IsometrikAgentOptions(
         name="Product Details Agent",
         description="Specializes in providing detailed product information, recommendations, comparisons, and purchase advice.",
-        api_url=os.getenv("PRODUCT_AGENT_API_URL"),
+        api_url=os.getenv("API_URL"),
         auth_token=os.getenv("PRODUCT_AGENT_AUTH_TOKEN"),
         additional_params=body
     )
