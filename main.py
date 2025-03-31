@@ -43,27 +43,25 @@ async def start_generation(query, user_id, session_id):
                 
                 if '"productId"' in response_text:
                     try:
-                        products_match = re.search(r'(\[{"id":.*?"url":.*?}\])', response_text, re.DOTALL)
-                        if products_match:
-                            extracted_products = json.loads(products_match.group(1))
-                            return {
-                                "response": "We've found exactly what you're looking for! Check out your search results below.",
-                                "request_id": str(uuid.uuid4()),
-                                "widgets": [
-                                    {
-                                        "widgetId": 2,
-                                        "widgets_type": 2,
-                                        "type": "products",
-                                        "widget": extracted_products
-                                    },
-                                    {
-                                        "widgetId": 1,
-                                        "widgets_type": 1,
-                                        "type": "options",
-                                        "widget": ["Load More Products"]
-                                    }
-                                ]
-                            }
+                        extracted_products = json.loads(response_text)
+                        return {
+                            "response": "We've found exactly what you're looking for! Check out your search results below.",
+                            "request_id": str(uuid.uuid4()),
+                            "widgets": [
+                                {
+                                    "widgetId": 2,
+                                    "widgets_type": 2,
+                                    "type": "products",
+                                    "widget": extracted_products
+                                },
+                                {
+                                    "widgetId": 1,
+                                    "widgets_type": 1,
+                                    "type": "options",
+                                    "widget": ["Load More Products"]
+                                }
+                            ]
+                        }
                     except (json.JSONDecodeError, re.error) as e:
                         print(f"Error extracting products: {e}")
                         pass
@@ -141,7 +139,6 @@ async def start_generation(query, user_id, session_id):
                     else:
                         extracted_options = []      
                     
-                    # Format response with widgets structure
                     return {
                         "response": extracted_text,
                         "request_id": str(uuid.uuid4()),
@@ -165,7 +162,7 @@ async def start_generation(query, user_id, session_id):
 
 
 
-@app.post("/chat")
+@app.post("/agent-chat")
 async def stream_chat(body: ChatRequest):
     response = await start_generation(body.content, body.user_id, body.session_id)
     return response
