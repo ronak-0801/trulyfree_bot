@@ -20,27 +20,33 @@ app.add_middleware(
 )
 
 
+
 class ChatRequest(BaseModel):
-    content: str
-    user_id: str
+    message: str
     session_id: str
+    agent_id: str
+    isLoggedIn: bool
+    finger_print_id: str
+    user_id: str ="user123"
 
 
-def setup_orchestrator():
-    orchestrator = create_orchestrator()
+
+def setup_orchestrator(body: ChatRequest):
+    orchestrator = create_orchestrator(body)
 
     return orchestrator
 
 
-async def start_generation(query, user_id, session_id):
+async def start_generation(body):
     try:
-        orchestrator = setup_orchestrator()
-        response = await orchestrator.route_request(query, user_id, session_id)
+
+        orchestrator = setup_orchestrator(body)
+        response = await orchestrator.route_request(body.message, body.user_id, body.session_id)
 
         if isinstance(response, AgentResponse):
             if isinstance(response.output, ConversationMessage):
                 response_text = response.output.content[0].get("text", "")
-                
+                # print(response_text)
                 if '"productId"' in response_text:
                     try:
                         extracted_products = json.loads(response_text)
@@ -164,7 +170,9 @@ async def start_generation(query, user_id, session_id):
 
 @app.post("/agent-chat")
 async def stream_chat(body: ChatRequest):
-    response = await start_generation(body.content, body.user_id, body.session_id)
+    response = await start_generation(
+        body
+    )
     return response
 
 

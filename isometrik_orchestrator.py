@@ -3,8 +3,7 @@ import os
 import requests
 import json
 from dotenv import load_dotenv
-from typing import List, Dict, Any
-from multi_agent_orchestrator.agents import OpenAIAgent, OpenAIAgentOptions
+from typing import List, Dict, Optional
 from multi_agent_orchestrator.orchestrator import (
     MultiAgentOrchestrator,
     OrchestratorConfig,
@@ -14,219 +13,135 @@ from multi_agent_orchestrator.classifiers import (
     OpenAIClassifierOptions,
 )
 from multi_agent_orchestrator.storage import InMemoryChatStorage
-from multi_agent_orchestrator.retrievers import Retriever
+from multi_agent_orchestrator.types import ConversationMessage, ParticipantRole
+from multi_agent_orchestrator.agents import (
+    AgentResponse,
+    Agent,
+    AgentOptions,
+)
+
 
 load_dotenv()
 
 memory_storage = InMemoryChatStorage()
 
-custom_system_prompt = {
-                "template": """CRITICAL: You are a JSON pass-through agent.
-Your only task is to return the exact JSON context provided, with zero modifications.
-Do not add text, do not modify structure, do not format anything and dont add any other text.
-Return the raw JSON context exactly as provided. Make sure to return entire context.
-"""
-}
 
-inference_config = {
-    "maxTokens": 4000
-}
-
-class IsometrikRetrieverOptions:
-    def __init__(self, endpoint: str, auth_token: str, agent_id: str, session_id: str):
-        self.endpoint = endpoint
-        self.auth_token = auth_token
-        self.agent_id = agent_id
-        self.session_id = session_id
-
-
-class IsometrikRetriever(Retriever):
-    def __init__(self, options: IsometrikRetrieverOptions):
-        super().__init__(options)
-        self.options = options
-
-        if not all([options.endpoint, options.auth_token, options.agent_id]):
-            raise ValueError(
-                "endpoint, auth_token, and agent_id are required in options"
-            )
-
-    async def retrieve_and_generate(
-        self, text, retrieve_and_generate_configuration=None
+class IsometrikAgentOptions(AgentOptions):
+    def __init__(
+        self,
+        name: str,
+        description: str,
+        api_url: str,
+        auth_token: str,
+        additional_params: Optional[Dict[str, str]] = None,
     ):
-        pass
-
-    async def retrieve(self, text: str) -> List[Dict[str, Any]]:
+        super().__init__(name=name, description=description)
+        self.api_url = api_url
+        self.auth_token = auth_token
+        self.additional_params = additional_params
+class IsometrikAgent(Agent):
+    def __init__(self, options: IsometrikAgentOptions):
+        super().__init__(options)
+        self.api_url = options.api_url
+        self.auth_token = options.auth_token
+        self.additional_params = options.additional_params
+    async def process_request(
+        self,
+        input_text: str,
+        user_id: str,
+        session_id: str,
+        chat_history: List[ConversationMessage],
+        additional_params: Optional[Dict[str, str]] = None,
+    ) -> AgentResponse:
+        """Process a request by sending it to the Isometrik API."""
+        headers = {
+            "Authorization": f"Bearer {self.auth_token}",
+            "Content-Type": "application/json",
+        }
+        payload = {
+            "session_id": session_id,
+            "message": input_text,
+            "agent_id": self.additional_params.agent_id,
+            "isLoggedIn": self.additional_params.isLoggedIn,
+            "finger_print_id": self.additional_params.finger_print_id,
+        }
         try:
-            headers = {
-                "Content-Type": "application/json",
-                "Authorization": f"Bearer {self.options.auth_token}",
-            }
-
-            payload = {
-                "session_id": self.options.session_id, 
-                "message": text,
-                "agent_id": self.options.agent_id,
-            }
-
-            response = await asyncio.to_thread(
-                requests.post, self.options.endpoint, headers=headers, json=payload
+            response = requests.post(self.api_url, headers=headers, json=payload)
+            
+            if response.status_code == 200:
+                data = response.json()
+                # print(data)
+                return ConversationMessage(
+                    role=ParticipantRole.ASSISTANT.value,
+                    content=[data]
+                )
+        
+        except Exception as e:
+            error_msg = f"Error processing request: {str(e)}"
+            return AgentResponse(
+                metadata={},
+                streaming=False,
+                output=error_msg
             )
 
-            if response.status_code != 200:
-                print(f"Retriever error: HTTP {response.status_code} - {response.text}")
-                raise Exception(f"HTTP error! status: {response.status_code}")
-            
-            
-            content = response.text
-            data = json.loads(content)
-            print(data)
-            return data
-
-        except Exception as e:
-            print(f"Retriever error: {str(e)}")
-            raise Exception(f"Failed to retrieve: {str(e)}")
-
-    async def retrieve_and_combine_results(self, text: str) -> Dict[str, Any]:
-
-        results = await self.retrieve(text)
-        return self._combine_results(results)
-
-    @staticmethod
-    def _combine_results(results: List[Dict[str, Any]]) -> Dict[str, Any]:
-        return results["text"]
-
-
-def create_query_retriever():
-    return IsometrikRetriever(
-        IsometrikRetrieverOptions(
-            endpoint=os.getenv("QUERY_AGENT_API_URL"),
-            auth_token=os.getenv("QUERY_AGENT_AUTH_TOKEN"),
-            agent_id=os.getenv("QUERY_AGENT_ID"),
-            session_id=os.getenv("QUERY_AGENT_SESSION_ID"),
-        )
+def create_query_agent(body):
+    options = IsometrikAgentOptions(
+        name="Query Agent",
+        description="Specializes in answering customer FAQs and product information",
+        api_url=os.getenv("QUERY_AGENT_API_URL"),
+        auth_token=os.getenv("QUERY_AGENT_AUTH_TOKEN"),
+        additional_params=body
     )
+    return IsometrikAgent(options)
 
 
-def create_order_retriever():
-    return IsometrikRetriever(
-        IsometrikRetrieverOptions(
-            endpoint=os.getenv("ORDER_AGENT_API_URL"),
-            auth_token=os.getenv("ORDER_AGENT_AUTH_TOKEN"),
-            agent_id=os.getenv("ORDER_AGENT_ID"),
-            session_id=os.getenv("ORDER_AGENT_SESSION_ID"),
-        )
+
+def create_order_agent(body):
+    options = IsometrikAgentOptions(
+        name="Order Agent",
+        description="Specializes in handling order-related queries, order status, and processing new orders",
+        api_url=os.getenv("ORDER_AGENT_API_URL"),
+        auth_token=os.getenv("ORDER_AGENT_AUTH_TOKEN"),
+        additional_params=body
     )
+    return IsometrikAgent(options)
 
 
-def create_ecom_manager_retriever():
-    return IsometrikRetriever(
-        IsometrikRetrieverOptions(
-            endpoint=os.getenv("MANAGER_AGENT_API_URL"),
-            auth_token=os.getenv("MANAGER_AGENT_AUTH_TOKEN"),
-            agent_id=os.getenv("MANAGER_AGENT_ID"),
-            session_id=os.getenv("MANAGER_AGENT_SESSION_ID"),
-        )
+def create_ecom_manager_agent(body):
+    options = IsometrikAgentOptions(
+        name="Ecom Manager Agent",
+        description="Specializes in finding toxin-free, eco-friendly solutions for home and personal care",
+        api_url=os.getenv("MANAGER_AGENT_API_URL"),
+        auth_token=os.getenv("MANAGER_AGENT_AUTH_TOKEN"),
+        additional_params=body
     )
+    return IsometrikAgent(options)
 
 
-def create_subscription_retriever():
-    return IsometrikRetriever(
-        IsometrikRetrieverOptions(
-            endpoint=os.getenv("SUBSCRIPTION_AGENT_API_URL"),
-            auth_token=os.getenv("SUBSCRIPTION_AGENT_AUTH_TOKEN"),
-            agent_id=os.getenv("SUBSCRIPTION_AGENT_ID"),
-            session_id=os.getenv("SESSION_ID"),
-        )
+def create_subscription_agent(body):
+    options = IsometrikAgentOptions(
+        name="Subscription Agent",
+        description="Specializes in handling subscription-related queries",
+        api_url=os.getenv("SUBSCRIPTION_AGENT_API_URL"),
+        auth_token=os.getenv("SUBSCRIPTION_AGENT_AUTH_TOKEN"),
+        additional_params=body
     )
+    return IsometrikAgent(options)
 
 
-def create_product_retriever():
-    return IsometrikRetriever(
-        IsometrikRetrieverOptions(
-            endpoint=os.getenv("PRODUCT_AGENT_API_URL"),
-            auth_token=os.getenv("PRODUCT_AGENT_AUTH_TOKEN"),
-            agent_id=os.getenv("PRODUCT_AGENT_ID"),
-            session_id=os.getenv("PRODUCT_AGENT_SESSION_ID"),
-        )
+def create_product_details_agent(body):
+    options = IsometrikAgentOptions(
+        name="Product Details Agent",
+        description="Specializes in providing detailed product information, recommendations, comparisons, and purchase advice.",
+        api_url=os.getenv("PRODUCT_AGENT_API_URL"),
+        auth_token=os.getenv("PRODUCT_AGENT_AUTH_TOKEN"),
+        additional_params=body
     )
+    return IsometrikAgent(options)
 
 
-def create_query_agent():
-    return OpenAIAgent(
-        OpenAIAgentOptions(
-            name="Query Agent",
-            description="Specializes in answering customer FAQs, general inquiries, and product information",
-            api_key=os.getenv("OPENAI_API_KEY"),
-            model="gpt-4o-mini",
-            streaming=False,
-            retriever=create_query_retriever(),
-            custom_system_prompt=custom_system_prompt,
-            inference_config=inference_config
-        )
-    )
 
-
-def create_order_agent():
-    return OpenAIAgent(
-        OpenAIAgentOptions(
-            name="Order Agent",
-            description="Specializes in handling order-related queries, order status, and processing new orders",
-            api_key=os.getenv("OPENAI_API_KEY"),
-            model="gpt-4o-mini",
-            streaming=False,
-            retriever=create_order_retriever(),
-            custom_system_prompt=custom_system_prompt,
-            inference_config=inference_config
-        )
-    )
-
-
-def create_manager_agent():
-    return OpenAIAgent(
-        OpenAIAgentOptions(
-            name="Eco Manager Agent",
-            description="Specializes in finding toxin-free, eco-friendly solutions for home and personal care",
-            api_key=os.getenv("OPENAI_API_KEY"),
-            model="gpt-4o-mini",
-            streaming=False,
-            retriever=create_ecom_manager_retriever(),
-            custom_system_prompt=custom_system_prompt,
-            inference_config=inference_config
-        )
-    )
-
-
-def create_subscription_agent():
-    return OpenAIAgent(
-        OpenAIAgentOptions(
-            name="Subscription Agent",
-            description="Specializes in handling subscription-related queries",
-            api_key=os.getenv("OPENAI_API_KEY"),
-            model="gpt-4o-mini",
-            streaming=False,
-            retriever=create_subscription_retriever(),
-            custom_system_prompt=custom_system_prompt,
-            inference_config=inference_config
-        )
-    )
-
-
-def create_product_agent():
-    return OpenAIAgent(
-        OpenAIAgentOptions(
-            name="Product Details Agent",
-            description="Specializes in providing detailed product information, recommendations, comparisons, and purchase advice.",
-            api_key=os.getenv("OPENAI_API_KEY"),
-            model="gpt-4o-mini",
-            streaming=False,
-            retriever=create_product_retriever(),
-            custom_system_prompt=custom_system_prompt,
-            inference_config=inference_config
-        )
-    )
-
-
-def create_orchestrator():
+def create_orchestrator(body):
     """Creates and initializes the orchestrator with all agents with streaming support."""
     custom_openai_classifier = OpenAIClassifier(
         OpenAIClassifierOptions(
@@ -247,11 +162,11 @@ def create_orchestrator():
         # storage=memory_storage,
     )
 
-    query_agent = create_query_agent()
-    order_agent = create_order_agent()
-    manager_agent = create_manager_agent()
-    subscription_agent = create_subscription_agent()
-    product_agent = create_product_agent()
+    query_agent = create_query_agent(body)
+    order_agent = create_order_agent(body)
+    manager_agent = create_ecom_manager_agent(body)
+    subscription_agent = create_subscription_agent(body)
+    product_agent = create_product_details_agent(body)
 
     orchestrator.add_agent(query_agent)
     orchestrator.add_agent(order_agent)
